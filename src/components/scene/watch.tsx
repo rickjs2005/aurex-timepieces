@@ -337,6 +337,14 @@ export default function Watch({
       ctx.stroke();
     }
 
+    // numerais aplicados 12 / 3 / 9 (às 6h vive a abertura do turbilhão)
+    ctx.fillStyle = "rgba(216,184,120,0.95)";
+    ctx.textAlign = "center";
+    ctx.font = "500 104px Georgia, serif";
+    ctx.fillText("12", CX, CX - 0.98 * S + 36);
+    ctx.fillText("3", CX + 0.98 * S, CX + 38);
+    ctx.fillText("9", CX - 0.98 * S, CX + 38);
+
     // marca
     ctx.fillStyle = "rgba(232,207,154,0.98)";
     ctx.textAlign = "center";
@@ -485,9 +493,11 @@ export default function Watch({
           const a = (i / 12) * Math.PI * 2;
           EU.set(0, 0, a);
           Q.setFromEuler(EU);
-          const long = i % 3 === 0 ? 1.5 : 1;
+          // 3h/12h/9h têm numerais impressos — índice some
+          const numeral = i === 0 || i === 3 || i === 6;
           V3.set(Math.cos(a) * 1.05, Math.sin(a) * 1.05, 0);
-          SC.set(long, 1, 1);
+          if (numeral) SC.set(0.001, 0.001, 0.001);
+          else SC.set(1, 1, 1);
           M4.compose(V3, Q, SC);
           m.setMatrixAt(i, M4);
         }

@@ -1,12 +1,39 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer } from "@react-three/drei";
 import { AnimatePresence, motion } from "framer-motion";
 import * as THREE from "three";
 import Watch from "@/components/scene/watch";
 import { world } from "@/lib/world";
+
+/** backdrop de estúdio: gradiente radial dourado-frio atrás do relógio */
+function StudioBackdrop({ x = 0 }: { x?: number }) {
+  const tex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 512;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(256, 236, 30, 256, 256, 250);
+    g.addColorStop(0, "rgba(214,186,130,0.34)");
+    g.addColorStop(0.45, "rgba(120,110,90,0.12)");
+    g.addColorStop(1, "rgba(7,8,10,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+    return new THREE.CanvasTexture(c);
+  }, []);
+
+  if (!tex) return null;
+  return (
+    <mesh position={[x, 0.1, -3.4]}>
+      <planeGeometry args={[9.5, 9.5]} />
+      <meshBasicMaterial map={tex} transparent depthWrite={false} />
+    </mesh>
+  );
+}
 
 const SLOT = 6;
 
@@ -168,6 +195,7 @@ export default function Gallery() {
               <ShowroomStage />
               {VARIANTS.map((v, i) => (
                 <group key={v.line} position={[i * SLOT, 0, 0]}>
+                  <StudioBackdrop />
                   <Watch configOverride={v} spinOnly />
                 </group>
               ))}
@@ -241,6 +269,7 @@ export default function Gallery() {
             <Canvas dpr={[1, 1.75]} camera={{ position: [0, 0.2, 4.6], fov: 36 }} gl={{ antialias: true }}>
               <Suspense fallback={null}>
                 <ShowroomStage />
+                <StudioBackdrop />
                 <DragWatch variant={VARIANTS[open]} />
               </Suspense>
             </Canvas>

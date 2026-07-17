@@ -180,22 +180,23 @@ export const SCENES: Record<SceneName, SceneDef> = {
     dust: [0.9, 1],
   },
 
-  // close no rotor exploded: local (0.1,-0.35,-2.26), câmera 3/4 por baixo
+  // close no rotor exploded: local (0.1,-0.35,-2.26), frontal por trás —
+  // a meia-lua esqueletizada inteira no quadro, oscilando
   rotor: {
     cam: [
-      [-1.5, -1.5, -4.2],
-      [-0.9, -1.4, -3.5],
+      [0.6, -0.1, -5.2],
+      [0.25, -0.3, -4.4],
     ],
     look: [
+      [0.1, -0.3, -2.26],
       [0.1, -0.35, -2.26],
-      [0.1, -0.38, -2.26],
     ],
-    fov: [30, 26],
+    fov: [36, 33],
     rotY: [0.05, 0],
     explode: [1, 1],
     key: [0.9, 0.95],
-    rim: [1.5, 1.5],
-    amb: [0.65, 0.65],
+    rim: [1.9, 1.9],
+    amb: [0.8, 0.8],
     spin: [1.6, 1.2],
   },
 
