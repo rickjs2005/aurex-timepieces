@@ -288,6 +288,8 @@ export default function Watch({
   const crownRef = useRef<THREE.Group>(null);
   const linksTop = useRef<THREE.InstancedMesh>(null);
   const linksBot = useRef<THREE.InstancedMesh>(null);
+  const capsTop = useRef<THREE.InstancedMesh>(null);
+  const capsBot = useRef<THREE.InstancedMesh>(null);
 
   /* --- índices do mostrador (instanciados) --- */
   const idxRef = useRef<THREE.InstancedMesh>(null);
@@ -306,6 +308,96 @@ export default function Watch({
       z -= Math.sin(rx) * 0.3;
     }
     return arr;
+  }, []);
+
+  /* impressão do mostrador: trilha de minutos + marca, desenhadas em
+     canvas 2D → CanvasTexture. Camada Basic transparente sobre o dial
+     (a cor do dial continua lerpável por baixo). */
+  const printTex = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 1024;
+    c.height = 1024;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    const CX = 512;
+    const S = 403; // px por unidade de cena (dial r 1.27 ≈ 512px)
+
+    // trilha de minutos
+    for (let i = 0; i < 60; i++) {
+      const a = (i / 60) * Math.PI * 2;
+      const major = i % 5 === 0;
+      const r0 = 1.1 * S;
+      const r1 = (major ? 1.155 : 1.135) * S;
+      ctx.strokeStyle = major ? "rgba(216,184,120,0.95)" : "rgba(200,204,210,0.55)";
+      ctx.lineWidth = major ? 5 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(CX + Math.cos(a) * r0, CX + Math.sin(a) * r0);
+      ctx.lineTo(CX + Math.cos(a) * r1, CX + Math.sin(a) * r1);
+      ctx.stroke();
+    }
+
+    // marca
+    ctx.fillStyle = "rgba(232,207,154,0.98)";
+    ctx.textAlign = "center";
+    ctx.font = "600 58px Georgia, serif";
+    ctx.fillText("A U R E X", CX, CX - 148);
+    ctx.font = "300 24px Georgia, serif";
+    ctx.fillStyle = "rgba(200,204,210,0.75)";
+    ctx.fillText("A U T O M A T I Q U E", CX, CX - 112);
+    // assinatura do calibre acima da abertura do turbilhão
+    ctx.font = "300 22px Georgia, serif";
+    ctx.fillStyle = "rgba(216,184,120,0.8)";
+    ctx.fillText("T O U R B I L L O N", CX, CX + 118);
+
+    const t = new THREE.CanvasTexture(c);
+    t.anisotropy = 8;
+    // o canvas 2D tem Y pra baixo; o plane em XY tem Y pra cima
+    t.flipY = true;
+    return t;
+  }, []);
+
+  /* ponteiro dauphine: losango facetado extrudado com bevel */
+  const dauphine = useMemo(() => {
+    const make = (len: number, w: number, tail: number) => {
+      const s = new THREE.Shape();
+      s.moveTo(0, -tail);
+      s.lineTo(w / 2, 0);
+      s.lineTo(0, len);
+      s.lineTo(-w / 2, 0);
+      s.closePath();
+      return new THREE.ExtrudeGeometry(s, {
+        depth: 0.01,
+        bevelEnabled: true,
+        bevelThickness: 0.006,
+        bevelSize: 0.012,
+        bevelSegments: 1,
+      });
+    };
+    return { hour: make(0.62, 0.1, 0.12), minute: make(0.98, 0.075, 0.14) };
+  }, []);
+
+  /* rotor esqueletizado: meia-coroa com recortes circulares */
+  const rotorGeo = useMemo(() => {
+    const s = new THREE.Shape();
+    s.absarc(0, 0, 1.05, 0, Math.PI, false);
+    s.lineTo(-0.34, 0);
+    s.absarc(0, 0, 0.34, Math.PI, 0, true);
+    s.closePath();
+    // recortes
+    [[-0.62, 0.42], [0, 0.72], [0.62, 0.42]].forEach(([x, y]) => {
+      const h = new THREE.Path();
+      h.absarc(x, y, 0.15, 0, Math.PI * 2, true);
+      s.holes.push(h);
+    });
+    return new THREE.ExtrudeGeometry(s, {
+      depth: 0.03,
+      bevelEnabled: true,
+      bevelThickness: 0.008,
+      bevelSize: 0.008,
+      bevelSegments: 1,
+      curveSegments: 40,
+    });
   }, []);
 
   /* anel da caixa: extrusão de coroa circular (um cilindro sólido
@@ -407,7 +499,11 @@ export default function Watch({
 
     /* elos da pulseira (espalham no explode) */
     const spread = partLocal(0.18, 0.45);
-    const place = (mesh: THREE.InstancedMesh | null, sign: 1 | -1) => {
+    const place = (
+      mesh: THREE.InstancedMesh | null,
+      caps: THREE.InstancedMesh | null,
+      sign: 1 | -1
+    ) => {
       if (!mesh) return;
       for (let i = 0; i < 8; i++) {
         const b = linkBase[i];
@@ -416,12 +512,19 @@ export default function Watch({
         Q.setFromEuler(EU);
         M4.compose(V3, Q, SC);
         mesh.setMatrixAt(i, M4);
+        caps?.setMatrixAt(i, M4);
       }
       mesh.instanceMatrix.needsUpdate = true;
       mesh.frustumCulled = false;
+      if (caps) {
+        // elo central polido só na pulseira metálica
+        caps.visible = strap === 0;
+        caps.instanceMatrix.needsUpdate = true;
+        caps.frustumCulled = false;
+      }
     };
-    place(linksTop.current, 1);
-    place(linksBot.current, -1);
+    place(linksTop.current, capsTop.current, 1);
+    place(linksBot.current, capsBot.current, -1);
   });
 
   return (
@@ -518,6 +621,13 @@ export default function Watch({
         <mesh position={[0, 0, 0.02]} material={goldMat}>
           <torusGeometry args={[1.18, 0.022, 8, 56]} />
         </mesh>
+        {/* impressão: trilha de minutos + marca */}
+        {printTex && (
+          <mesh position={[0, 0, 0.024]}>
+            <circleGeometry args={[1.24, 48]} />
+            <meshBasicMaterial map={printTex} transparent depthWrite={false} />
+          </mesh>
+        )}
         {/* índices aplicados */}
         <instancedMesh ref={idxRef} args={[undefined, undefined, 12]} material={handsMat} position={[0, 0, 0.035]}>
           <boxGeometry args={[0.2, 0.06, 0.028]} />
@@ -543,21 +653,17 @@ export default function Watch({
       {/* ================= PONTEIROS ================= */}
       <Part home={[0, 0, 0.2]} off={[0.5, 0.45, 1.3]} rotOff={[0, 0.2, 0]} delay={0.1} span={0.3}>
         <group ref={hourRef} rotation={[0, 0, 0.8]}>
-          <mesh position={[0, 0.26, 0]} material={handsMat}>
-            <boxGeometry args={[0.055, 0.6, 0.014]} />
-          </mesh>
-          <mesh position={[0, 0.34, 0.011]} material={lumeMat}>
-            <boxGeometry args={[0.024, 0.3, 0.006]} />
+          <mesh geometry={dauphine.hour} material={handsMat} />
+          <mesh position={[0, 0.32, 0.018]} material={lumeMat}>
+            <boxGeometry args={[0.02, 0.26, 0.005]} />
           </mesh>
         </group>
       </Part>
       <Part home={[0, 0, 0.22]} off={[-0.45, 0.55, 1.5]} rotOff={[0, -0.2, 0]} delay={0.13} span={0.3}>
         <group ref={minRef} rotation={[0, 0, -0.6]}>
-          <mesh position={[0, 0.42, 0]} material={handsMat}>
-            <boxGeometry args={[0.04, 0.95, 0.012]} />
-          </mesh>
-          <mesh position={[0, 0.52, 0.01]} material={lumeMat}>
-            <boxGeometry args={[0.018, 0.45, 0.005]} />
+          <mesh geometry={dauphine.minute} material={handsMat} />
+          <mesh position={[0, 0.55, 0.018]} material={lumeMat}>
+            <boxGeometry args={[0.016, 0.4, 0.005]} />
           </mesh>
         </group>
       </Part>
@@ -646,14 +752,15 @@ export default function Watch({
       {/* rotor (verso) */}
       <Part home={[0, 0, -0.16]} off={[0.1, -0.35, -2.1]} rotOff={[-0.35, 0, 0]} delay={0.48} span={0.36}>
         <group ref={rotorRef}>
-          <mesh rotation={[Math.PI / 2, 0, 0]} material={goldMat}>
-            <cylinderGeometry args={[1.05, 1.05, 0.035, 40, 1, false, 0, Math.PI]} />
+          {/* massa oscilante esqueletizada em ouro */}
+          <mesh geometry={rotorGeo} material={goldMat} />
+          {/* meia-lua interna escura (contraste) */}
+          <mesh position={[0, 0.17, -0.005]} rotation={[Math.PI / 2, 0, 0]} material={darkMat}>
+            <cylinderGeometry args={[0.3, 0.3, 0.02, 24, 1, false, 0, Math.PI]} />
           </mesh>
-          <mesh rotation={[Math.PI / 2, 0, 0]} material={darkMat}>
-            <cylinderGeometry args={[0.5, 0.5, 0.037, 28, 1, false, 0, Math.PI]} />
-          </mesh>
+          {/* cubo central */}
           <mesh rotation={[Math.PI / 2, 0, 0]} material={steelMat}>
-            <cylinderGeometry args={[0.12, 0.12, 0.06, 16]} />
+            <cylinderGeometry args={[0.12, 0.12, 0.07, 16]} />
           </mesh>
         </group>
       </Part>
@@ -663,13 +770,20 @@ export default function Watch({
         <Tourbillon gold={goldMat} steel={steelMat} />
       </Part>
 
-      {/* ================= PULSEIRA ================= */}
+      {/* ================= PULSEIRA (3 elos, two-tone) ================= */}
       <group>
         <instancedMesh ref={linksTop} args={[undefined, undefined, 8]} material={strapMat}>
           <boxGeometry args={[0.92, 0.3, 0.13]} />
         </instancedMesh>
         <instancedMesh ref={linksBot} args={[undefined, undefined, 8]} material={strapMat}>
           <boxGeometry args={[0.92, 0.3, 0.13]} />
+        </instancedMesh>
+        {/* elo central polido */}
+        <instancedMesh ref={capsTop} args={[undefined, undefined, 8]} material={goldMat}>
+          <boxGeometry args={[0.34, 0.31, 0.15]} />
+        </instancedMesh>
+        <instancedMesh ref={capsBot} args={[undefined, undefined, 8]} material={goldMat}>
+          <boxGeometry args={[0.34, 0.31, 0.15]} />
         </instancedMesh>
       </group>
     </group>
