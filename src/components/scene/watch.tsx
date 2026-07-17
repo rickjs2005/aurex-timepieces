@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { world, CASES, DIALS, HANDS, lerp, clamp01 } from "@/lib/world";
 
 /**
@@ -337,13 +338,25 @@ export default function Watch({
       ctx.stroke();
     }
 
-    // numerais aplicados 12 / 3 / 9 (às 6h vive a abertura do turbilhão)
+    // numerais aplicados 12 / 9 (3h recebe a janela de data; 6h, o turbilhão)
     ctx.fillStyle = "rgba(216,184,120,0.95)";
     ctx.textAlign = "center";
     ctx.font = "500 104px Georgia, serif";
     ctx.fillText("12", CX, CX - 0.98 * S + 36);
-    ctx.fillText("3", CX + 0.98 * S, CX + 38);
     ctx.fillText("9", CX - 0.98 * S, CX + 38);
+
+    // janela de data às 3h — moldura rebaixada + placa creme + numeral
+    const dx = CX + 0.86 * S;
+    ctx.fillStyle = "rgba(20,22,26,0.9)";
+    ctx.fillRect(dx - 52, CX - 40, 104, 80);
+    ctx.strokeStyle = "rgba(216,184,120,0.85)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(dx - 52, CX - 40, 104, 80);
+    ctx.fillStyle = "#e8e6df";
+    ctx.fillRect(dx - 42, CX - 30, 84, 60);
+    ctx.fillStyle = "#1a1c20";
+    ctx.font = "600 52px Georgia, serif";
+    ctx.fillText("28", dx, CX + 18);
 
     // marca
     ctx.fillStyle = "rgba(232,207,154,0.98)";
@@ -407,6 +420,12 @@ export default function Watch({
       curveSegments: 40,
     });
   }, []);
+
+  /* geometrias arredondadas — elos, elo central e lugs (caixas chapadas
+     eram o maior "cheiro de procedural" do modelo) */
+  const linkGeo = useMemo(() => new RoundedBoxGeometry(0.86, 0.27, 0.14, 3, 0.05), []);
+  const capGeo = useMemo(() => new RoundedBoxGeometry(0.32, 0.28, 0.16, 3, 0.055), []);
+  const lugGeo = useMemo(() => new RoundedBoxGeometry(0.26, 0.48, 0.26, 3, 0.07), []);
 
   /* anel da caixa: extrusão de coroa circular (um cilindro sólido
      tapava o mostrador — a caixa é um TUBO, não um disco) */
@@ -520,10 +539,13 @@ export default function Watch({
         V3.set(0, sign * (b.y + spread * (1.5 + i * 0.34)), b.z - spread * (0.3 + i * 0.12));
         EU.set(sign * b.rx + spread * sign * (0.2 + i * 0.08), 0, 0);
         Q.setFromEuler(EU);
+        // pulseira afila conforme se afasta da caixa
+        SC.set(1 - i * 0.042, 1, 1);
         M4.compose(V3, Q, SC);
         mesh.setMatrixAt(i, M4);
         caps?.setMatrixAt(i, M4);
       }
+      SC.set(1, 1, 1);
       mesh.instanceMatrix.needsUpdate = true;
       mesh.frustumCulled = false;
       if (caps) {
@@ -543,17 +565,16 @@ export default function Watch({
       <Part home={[0, 0, 0]} off={[0, -1.3, -0.7]} rotOff={[-0.35, 0, 0]} delay={0.46} span={0.4}>
         {/* corpo da caixa — anel extrudado (aberto no centro) */}
         <mesh geometry={caseRingGeo} material={caseMat} />
-        {/* lugs (alças) */}
+        {/* lugs (alças) — arredondados e levemente convergentes */}
         {([1, -1] as const).map((sy) =>
           ([1, -1] as const).map((sx) => (
             <mesh
               key={`${sy}${sx}`}
-              position={[sx * 0.62, sy * 1.52, -0.02]}
-              rotation={[sy * -0.18, 0, 0]}
+              position={[sx * 0.6, sy * 1.5, -0.02]}
+              rotation={[sy * -0.18, 0, sx * sy * 0.08]}
               material={caseMat}
-            >
-              <boxGeometry args={[0.3, 0.5, 0.3]} />
-            </mesh>
+              geometry={lugGeo}
+            />
           ))
         )}
       </Part>
@@ -642,14 +663,6 @@ export default function Watch({
         <instancedMesh ref={idxRef} args={[undefined, undefined, 12]} material={handsMat} position={[0, 0, 0.035]}>
           <boxGeometry args={[0.2, 0.06, 0.028]} />
         </instancedMesh>
-        {/* janela de data às 3h */}
-        <mesh position={[0.78, 0, 0.025]} material={goldMat}>
-          <boxGeometry args={[0.2, 0.15, 0.012]} />
-        </mesh>
-        <mesh position={[0.78, 0, 0.03]}>
-          <boxGeometry args={[0.16, 0.11, 0.008]} />
-          <meshStandardMaterial color="#e8e6df" />
-        </mesh>
         {/* placa da marca ao norte */}
         <mesh position={[0, 0.55, 0.025]} material={goldMat}>
           <boxGeometry args={[0.42, 0.05, 0.01]} />
@@ -782,19 +795,11 @@ export default function Watch({
 
       {/* ================= PULSEIRA (3 elos, two-tone) ================= */}
       <group>
-        <instancedMesh ref={linksTop} args={[undefined, undefined, 8]} material={strapMat}>
-          <boxGeometry args={[0.92, 0.3, 0.13]} />
-        </instancedMesh>
-        <instancedMesh ref={linksBot} args={[undefined, undefined, 8]} material={strapMat}>
-          <boxGeometry args={[0.92, 0.3, 0.13]} />
-        </instancedMesh>
+        <instancedMesh ref={linksTop} args={[undefined, undefined, 8]} geometry={linkGeo} material={strapMat} />
+        <instancedMesh ref={linksBot} args={[undefined, undefined, 8]} geometry={linkGeo} material={strapMat} />
         {/* elo central polido */}
-        <instancedMesh ref={capsTop} args={[undefined, undefined, 8]} material={goldMat}>
-          <boxGeometry args={[0.34, 0.31, 0.15]} />
-        </instancedMesh>
-        <instancedMesh ref={capsBot} args={[undefined, undefined, 8]} material={goldMat}>
-          <boxGeometry args={[0.34, 0.31, 0.15]} />
-        </instancedMesh>
+        <instancedMesh ref={capsTop} args={[undefined, undefined, 8]} geometry={capGeo} material={goldMat} />
+        <instancedMesh ref={capsBot} args={[undefined, undefined, 8]} geometry={capGeo} material={goldMat} />
       </group>
     </group>
   );
