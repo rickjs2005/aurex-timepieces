@@ -68,7 +68,7 @@ export default function Finale() {
             único mestre relojoeiro.
           </p>
           <a
-            href="mailto:atelier@aurextimepieces.ch?subject=AX-01%20—%20Discover%20the%20Collection"
+            href="mailto:atelier@aurextimepieces.example?subject=AX-01%20—%20Discover%20the%20Collection"
             className="btn btn-gold mt-10"
             data-cursor="reservar"
           >

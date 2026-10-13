@@ -14,7 +14,7 @@ export default function Footer() {
             <p className="text-sm font-light leading-relaxed text-silver/60">
               Vallée de Joux, Suíça
               <br />
-              atelier@aurextimepieces.ch
+              atelier@aurextimepieces.example
             </p>
           </div>
           <div>
